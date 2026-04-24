@@ -107,12 +107,13 @@ function buildClaudeMessages(
 async function callChatAPI(
   messages: { role: "user" | "assistant"; content: string }[],
   searchParams: SearchParams,
-  results: ResultCard[]
+  results: ResultCard[],
+  flowStep?: string
 ): Promise<string> {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, searchParams, results }),
+    body: JSON.stringify({ messages, searchParams, results, flowStep }),
   });
   const data = await res.json();
   return data.reply as string;
@@ -212,12 +213,12 @@ export default function BuyShitFast() {
         const newParams = { item: input, budget: "", specs: "" };
         setSearchParams(newParams);
         setFlowStep("asking_budget");
-        setTimeout(() => {
-          addMessage({
-            message: `Nice! What's your budget for the ${input}? (e.g., €500 or "under €800")`,
-            type: "bot",
-          });
-        }, 400);
+        setConversation((old) => [...old, { message: "...", type: "bot", isThinking: true }]);
+        scrollToBottom();
+        const budgetPromptMsgs = buildClaudeMessages(conversation, input);
+        const budgetQuestion = await callChatAPI(budgetPromptMsgs, newParams, [], "asking_budget");
+        setConversation((old) => [...old.slice(0, -1), { message: budgetQuestion, type: "bot" }]);
+        scrollToBottom();
         break;
       }
 
@@ -225,12 +226,12 @@ export default function BuyShitFast() {
         const newParams = { ...searchParams, budget: input };
         setSearchParams(newParams);
         setFlowStep("asking_specs");
-        setTimeout(() => {
-          addMessage({
-            message: `Got it — budget of ${input}. Any specific requirements? (brand, storage, condition, color, etc.) Type "any" to skip.`,
-            type: "bot",
-          });
-        }, 400);
+        setConversation((old) => [...old, { message: "...", type: "bot", isThinking: true }]);
+        scrollToBottom();
+        const specsPromptMsgs = buildClaudeMessages(conversation, input);
+        const specsQuestion = await callChatAPI(specsPromptMsgs, newParams, [], "asking_specs");
+        setConversation((old) => [...old.slice(0, -1), { message: specsQuestion, type: "bot" }]);
+        scrollToBottom();
         break;
       }
 

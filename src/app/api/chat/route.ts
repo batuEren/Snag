@@ -19,8 +19,18 @@ interface SearchParams {
   specs: string;
 }
 
-function buildSystemPrompt(searchParams: SearchParams | null, results: ResultCard[]): string {
-  let prompt = `You are Scout, a friendly and sharp second-hand deal-hunting assistant. You help users find the best value on pre-owned items. Be concise (1-3 sentences max), helpful, and occasionally witty. Focus on practical buying advice.`;
+function buildSystemPrompt(searchParams: SearchParams | null, results: ResultCard[], flowStep?: string): string {
+  const base = `You are Scout, a friendly and sharp second-hand deal-hunting assistant. You help users find the best value on pre-owned items. Be concise (1-3 sentences max), helpful, and occasionally witty. Focus on practical buying advice.`;
+
+  if (flowStep === "asking_budget") {
+    return `${base}\n\nThe user just told you they want to buy: ${searchParams?.item}. Ask them for their budget in a natural, friendly way. Adapt your question to the specific item — e.g. mention a realistic price range if it helps. 1-2 sentences only.`;
+  }
+
+  if (flowStep === "asking_specs") {
+    return `${base}\n\nThe user wants to buy: ${searchParams?.item} with a budget of ${searchParams?.budget}. Ask if they have specific requirements (brand, storage, condition, color, etc.) and mention they can say "any" to skip. 1-2 sentences only.`;
+  }
+
+  let prompt = base;
 
   if (searchParams?.item) {
     prompt += `\n\nThe user is looking for: ${searchParams.item}`;
@@ -41,9 +51,9 @@ function buildSystemPrompt(searchParams: SearchParams | null, results: ResultCar
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, searchParams, results } = await req.json();
+    const { messages, searchParams, results, flowStep } = await req.json();
 
-    const systemPrompt = buildSystemPrompt(searchParams, results ?? []);
+    const systemPrompt = buildSystemPrompt(searchParams, results ?? [], flowStep);
 
     const response = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
