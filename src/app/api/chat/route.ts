@@ -22,6 +22,10 @@ interface SearchParams {
 function buildSystemPrompt(searchParams: SearchParams | null, results: ResultCard[], flowStep?: string): string {
   const base = `You are Scout, a friendly and sharp second-hand deal-hunting assistant. You help users find the best value on pre-owned items. Be concise (1-3 sentences max), helpful, and occasionally witty. Focus on practical buying advice.`;
 
+  if (flowStep === "extract_item") {
+    return `Extract ONLY the item the user wants to buy from their message. Return just the item name (2–5 words max), nothing else — no punctuation, no explanation. Examples: "iPhone 14 Pro", "MacBook Air M2", "mountain bike", "Sony headphones WH-1000XM5".`;
+  }
+
   if (flowStep === "asking_budget") {
     return `${base}\n\nThe user just told you they want to buy: ${searchParams?.item}. Ask them for their budget in a natural, friendly way. Adapt your question to the specific item — e.g. mention a realistic price range if it helps. 1-2 sentences only.`;
   }
