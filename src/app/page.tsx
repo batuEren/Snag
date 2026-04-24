@@ -396,6 +396,26 @@ export default function BuyShitFast() {
       }
 
       case "chat": {
+        const newSearchIntent =
+          /\b(search(?:ing)? for|find (?:me |a |an |some )|look(?:ing)? for|show me (?:a |some |listings? for)|i want (?:to buy|to find|to search)|i(?:'m| am) looking for|can you (?:find|search|look for)|also (?:find|search|look for)|what about (?:buying |finding |searching for )?(?:a |an )?|how about (?:a |an )?)\b/i.test(input);
+
+        if (newSearchIntent) {
+          setConversation((old) => [...old, { message: "...", type: "bot", isThinking: true }]);
+          scrollToBottom();
+          const extractMsgs = buildClaudeMessages(conversation, input, currentImage);
+          const rawItem = await callChatAPI(extractMsgs, searchParams, [], "extract_item");
+          const cleanItem = rawItem.trim().replace(/[.!?,]$/, "") || input;
+          const newParams = { item: cleanItem, budget: "", specs: "" };
+          setSearchParams(newParams);
+          setFlowStep("asking_budget");
+          const budgetMsgs = buildClaudeMessages(conversation, input, currentImage);
+          const budgetQuestion = await callChatAPI(budgetMsgs, newParams, [], "asking_budget");
+          setConversation((old) => [...old.slice(0, -1), { message: budgetQuestion, type: "bot" }]);
+          setInputHint(hintForStep["asking_budget"]);
+          scrollToBottom();
+          break;
+        }
+
         setConversation((old) => [...old, { message: "...", type: "bot", isThinking: true }]);
         scrollToBottom();
         const msgs = buildClaudeMessages(conversation, input, currentImage);
