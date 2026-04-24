@@ -4,7 +4,7 @@ import { AutosizeTextarea } from "@/components/ui/autosize-textarea";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { KeyboardEvent, useRef, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Paperclip } from "lucide-react";
 import React from "react";
 
 interface ResultCard {
@@ -24,6 +24,7 @@ interface Message {
   type: "bot" | "user";
   isThinking?: boolean;
   results?: ResultCard[];
+  images?: string[];
 }
 
 type FlowStep = "asking_item" | "asking_budget" | "asking_specs" | "searching" | "chat";
@@ -92,22 +93,56 @@ function generateMockResults(item: string, budget: string): ResultCard[] {
   }));
 }
 
+type ContentBlock =
+  | { type: "text"; text: string }
+  | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
+
+type ClaudeMessage = { role: "user" | "assistant"; content: string | ContentBlock[] };
+
+function imageToContentBlock(dataUrl: string): ContentBlock | null {
+  const match = dataUrl.match(/^data:(image\/[\w+]+);base64,([\s\S]+)$/);
+  if (!match) return null;
+  return { type: "image", source: { type: "base64", media_type: match[1], data: match[2] } };
+}
+
 function buildClaudeMessages(
   conversation: Message[],
-  newInput: string
-): { role: "user" | "assistant"; content: string }[] {
-  const history = conversation
+  newInput: string,
+  imageBase64?: string | null
+): ClaudeMessage[] {
+  const history: ClaudeMessage[] = conversation
     .filter((m) => !m.isThinking && m.message.trim() && m.message !== "...")
-    .map((m) => ({ role: (m.type === "user" ? "user" : "assistant") as "user" | "assistant", content: m.message }));
+    .map((m) => {
+      if (m.type === "user" && m.images && m.images.length > 0) {
+        const blocks: ContentBlock[] = [];
+        for (const img of m.images) {
+          const block = imageToContentBlock(img);
+          if (block) blocks.push(block);
+        }
+        blocks.push({ type: "text", text: m.message });
+        return { role: "user" as const, content: blocks };
+      }
+      return { role: (m.type === "user" ? "user" : "assistant") as "user" | "assistant", content: m.message };
+    });
 
-  const all = [...history, { role: "user" as const, content: newInput }];
+  let newContent: string | ContentBlock[];
+  if (imageBase64) {
+    const block = imageToContentBlock(imageBase64);
+    newContent = block
+      ? [block, { type: "text", text: newInput }]
+      : newInput;
+  } else {
+    newContent = newInput;
+  }
+
+  const all: ClaudeMessage[] = [...history, { role: "user" as const, content: newContent }];
   const recent = all.slice(-12);
   const firstUser = recent.findIndex((m) => m.role === "user");
-  return firstUser >= 0 ? recent.slice(firstUser) : [{ role: "user", content: newInput }];
+  return firstUser >= 0 ? recent.slice(firstUser) : [{ role: "user", content: newContent }];
 }
 
 async function callChatAPI(
-  messages: { role: "user" | "assistant"; content: string }[],
+  messages: ClaudeMessage[],
   searchParams: SearchParams,
   results: ResultCard[],
   flowStep?: string
@@ -134,6 +169,16 @@ export default function BuyShitFast() {
   const [searchParams, setSearchParams] = useState<SearchParams>({ item: "", budget: "", specs: "" });
   const [searchResults, setSearchResults] = useState<ResultCard[]>([]);
   const [conversation, setConversation] = useState<Message[]>([INITIAL_MESSAGE]);
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [inputHint, setInputHint] = useState("What would you like to buy?");
+
+  const hintForStep: Record<FlowStep, string> = {
+    asking_item:   "What would you like to buy?",
+    asking_budget: "Your budget (e.g. €300)",
+    asking_specs:  "Requirements, or 'any' to skip",
+    searching:     "Searching for deals…",
+    chat:          "Ask Scout anything…",
+  };
 
   const scrollToBottom = () => {
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
@@ -212,17 +257,36 @@ export default function BuyShitFast() {
       ...old,
       { message: summaryReply, type: "bot" },
     ]);
+    setInputHint(hintForStep["chat"]);
     scrollToBottom();
 
     setFlowStep("chat");
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const img = new window.Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const MAX = 512;
+      const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      setUploadedImage(canvas.toDataURL("image/jpeg", 0.8));
+    };
+    img.src = URL.createObjectURL(file);
   };
 
   const handleSendMessage = async () => {
     const input = userInput.trim();
     if (!input || flowStep === "searching") return;
 
+    const currentImage = uploadedImage;
+    setUploadedImage(null);
     setUserInput("");
-    addMessage({ message: input, type: "user" });
+    addMessage({ message: input, type: "user", images: currentImage ? [currentImage] : undefined });
 
     switch (flowStep) {
       case "asking_item": {
@@ -231,22 +295,34 @@ export default function BuyShitFast() {
         setFlowStep("asking_budget");
         setConversation((old) => [...old, { message: "...", type: "bot", isThinking: true }]);
         scrollToBottom();
-        const budgetPromptMsgs = buildClaudeMessages(conversation, input);
+        const budgetPromptMsgs = buildClaudeMessages(conversation, input, currentImage);
         const budgetQuestion = await callChatAPI(budgetPromptMsgs, newParams, [], "asking_budget");
         setConversation((old) => [...old.slice(0, -1), { message: budgetQuestion, type: "bot" }]);
+        setInputHint(hintForStep["asking_budget"]);
         scrollToBottom();
         break;
       }
 
       case "asking_budget": {
+        const looksLikeBudget = /\d/.test(input) || /[€$£]/.test(input) ||
+          /\b(any|whatever|flexible|open|no limit|no budget|doesn't matter|don't care|idc)\b/i.test(input);
+
+        if (!looksLikeBudget) {
+          const nudge = "I need a rough budget to find you the best deals! Even a range like €100–300 or just 'any' works fine.";
+          setConversation((old) => [...old, { message: nudge, type: "bot" }]);
+          scrollToBottom();
+          break;
+        }
+
         const newParams = { ...searchParams, budget: input };
         setSearchParams(newParams);
         setFlowStep("asking_specs");
         setConversation((old) => [...old, { message: "...", type: "bot", isThinking: true }]);
         scrollToBottom();
-        const specsPromptMsgs = buildClaudeMessages(conversation, input);
+        const specsPromptMsgs = buildClaudeMessages(conversation, input, currentImage);
         const specsQuestion = await callChatAPI(specsPromptMsgs, newParams, [], "asking_specs");
         setConversation((old) => [...old.slice(0, -1), { message: specsQuestion, type: "bot" }]);
+        setInputHint(hintForStep["asking_specs"]);
         scrollToBottom();
         break;
       }
@@ -262,12 +338,13 @@ export default function BuyShitFast() {
       case "chat": {
         setConversation((old) => [...old, { message: "...", type: "bot", isThinking: true }]);
         scrollToBottom();
-        const msgs = buildClaudeMessages(conversation, input);
+        const msgs = buildClaudeMessages(conversation, input, currentImage);
         const reply = await callChatAPI(msgs, searchParams, searchResults);
         setConversation((old) => [
           ...old.slice(0, -1),
           { message: reply, type: "bot" },
         ]);
+        setInputHint(hintForStep["chat"]);
         scrollToBottom();
         break;
       }
@@ -279,7 +356,9 @@ export default function BuyShitFast() {
     setSearchParams({ item: "", budget: "", specs: "" });
     setSearchResults([]);
     setUserInput("");
+    setUploadedImage(null);
     setConversation([INITIAL_MESSAGE]);
+    setInputHint(hintForStep["asking_item"]);
   };
 
   const handleEnter = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -290,13 +369,8 @@ export default function BuyShitFast() {
   };
 
   const getPlaceholder = () => {
-    switch (flowStep) {
-      case "asking_item":   return "What would you like to buy?";
-      case "asking_budget": return "Enter your budget (e.g., €500)";
-      case "asking_specs":  return "Any requirements? (or type 'any' to skip)";
-      case "searching":     return "Searching for deals...";
-      case "chat":          return "Ask Scout anything...";
-    }
+    if (flowStep === "searching") return "Searching for deals...";
+    return inputHint;
   };
 
   return (
@@ -429,8 +503,11 @@ export default function BuyShitFast() {
                   )}
                 </div>
               ) : (
-                <div className="max-w-[60%] flex flex-col text-white bg-[#2196f3] ml-auto items-start gap-2 rounded-[20px] p-4 text-left text-base font-medium transition-all whitespace-pre-wrap break-words">
-                  {msg.message}
+                <div className="max-w-[60%] flex flex-col text-white bg-[#2196f3] ml-auto items-start gap-2 rounded-[20px] p-4 text-left text-base font-medium transition-all">
+                  {msg.images?.map((src, ii) => (
+                    <img key={ii} src={src} alt="attached" className="w-full rounded-xl object-cover max-h-48" />
+                  ))}
+                  <span className="whitespace-pre-wrap break-words">{msg.message}</span>
                 </div>
               )}
             </div>
@@ -474,6 +551,33 @@ export default function BuyShitFast() {
               onChange={(e) => setUserInput(e.target.value)}
               disabled={flowStep === "searching"}
             />
+
+            {flowStep !== "searching" && (
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {uploadedImage && (
+                  <div className="relative">
+                    <img src={uploadedImage} alt="preview" className="h-10 w-10 rounded-lg object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setUploadedImage(null)}
+                      className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                      style={{ background: "#ef4444", lineHeight: 1 }}
+                      aria-label="Remove image"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+                <label
+                  className="flex items-center cursor-pointer transition-colors"
+                  style={{ color: uploadedImage ? "#4fc3f7" : "#6b7280" }}
+                  title={uploadedImage ? "Photo attached — click to change" : "Attach a photo"}
+                >
+                  <Paperclip className="h-5 w-5" />
+                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                </label>
+              </div>
+            )}
 
             <Button
               onClick={handleSendMessage}
