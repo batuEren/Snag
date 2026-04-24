@@ -27,6 +27,13 @@ const STYLE_META: Record<string, { emoji: string; color: string; bg: string; bor
   haggler:  { emoji: "🔥", color: "#fb923c", bg: "rgba(251,146,60,0.09)",  border: "rgba(251,146,60,0.22)" },
 };
 
+function suggestedPrice(price: string): string {
+  const numeric = parseFloat(price.replace(/[^0-9.,]/g, "").replace(",", "."));
+  if (isNaN(numeric)) return "e.g. €350";
+  const symbol = price.match(/[€$£¥]/)?.[0] ?? "€";
+  return `e.g. ${symbol}${Math.round(numeric * 0.8)}`;
+}
+
 export default function NegotiationCopilot({ listing, onClose }: NegotiationCopilotProps) {
   const [targetPrice, setTargetPrice] = useState("");
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -162,7 +169,7 @@ export default function NegotiationCopilot({ listing, onClose }: NegotiationCopi
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="e.g. €350"
+                  placeholder={suggestedPrice(listing.price)}
                   value={targetPrice}
                   onChange={(e) => setTargetPrice(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleGenerate()}
