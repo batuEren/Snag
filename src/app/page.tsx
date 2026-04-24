@@ -91,22 +91,56 @@ function generateMockResults(item: string, budget: string): ResultCard[] {
   }));
 }
 
+type ContentBlock =
+  | { type: "text"; text: string }
+  | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
+
+type ClaudeMessage = { role: "user" | "assistant"; content: string | ContentBlock[] };
+
+function imageToContentBlock(dataUrl: string): ContentBlock | null {
+  const match = dataUrl.match(/^data:(image\/[\w+]+);base64,([\s\S]+)$/);
+  if (!match) return null;
+  return { type: "image", source: { type: "base64", media_type: match[1], data: match[2] } };
+}
+
 function buildClaudeMessages(
   conversation: Message[],
-  newInput: string
-): { role: "user" | "assistant"; content: string }[] {
-  const history = conversation
+  newInput: string,
+  imageBase64?: string | null
+): ClaudeMessage[] {
+  const history: ClaudeMessage[] = conversation
     .filter((m) => !m.isThinking && m.message.trim() && m.message !== "...")
-    .map((m) => ({ role: (m.type === "user" ? "user" : "assistant") as "user" | "assistant", content: m.message }));
+    .map((m) => {
+      if (m.type === "user" && m.images && m.images.length > 0) {
+        const blocks: ContentBlock[] = [];
+        for (const img of m.images) {
+          const block = imageToContentBlock(img);
+          if (block) blocks.push(block);
+        }
+        blocks.push({ type: "text", text: m.message });
+        return { role: "user" as const, content: blocks };
+      }
+      return { role: (m.type === "user" ? "user" : "assistant") as "user" | "assistant", content: m.message };
+    });
 
-  const all = [...history, { role: "user" as const, content: newInput }];
+  let newContent: string | ContentBlock[];
+  if (imageBase64) {
+    const block = imageToContentBlock(imageBase64);
+    newContent = block
+      ? [block, { type: "text", text: newInput }]
+      : newInput;
+  } else {
+    newContent = newInput;
+  }
+
+  const all: ClaudeMessage[] = [...history, { role: "user" as const, content: newContent }];
   const recent = all.slice(-12);
   const firstUser = recent.findIndex((m) => m.role === "user");
-  return firstUser >= 0 ? recent.slice(firstUser) : [{ role: "user", content: newInput }];
+  return firstUser >= 0 ? recent.slice(firstUser) : [{ role: "user", content: newContent }];
 }
 
 async function callChatAPI(
-  messages: { role: "user" | "assistant"; content: string }[],
+  messages: ClaudeMessage[],
   searchParams: SearchParams,
   results: ResultCard[],
   flowStep?: string
@@ -235,7 +269,7 @@ export default function BuyShitFast() {
         setFlowStep("asking_budget");
         setConversation((old) => [...old, { message: "...", type: "bot", isThinking: true }]);
         scrollToBottom();
-        const budgetPromptMsgs = buildClaudeMessages(conversation, input);
+        const budgetPromptMsgs = buildClaudeMessages(conversation, input, currentImage);
         const budgetQuestion = await callChatAPI(budgetPromptMsgs, newParams, [], "asking_budget");
         setConversation((old) => [...old.slice(0, -1), { message: budgetQuestion, type: "bot" }]);
         scrollToBottom();
@@ -248,7 +282,7 @@ export default function BuyShitFast() {
         setFlowStep("asking_specs");
         setConversation((old) => [...old, { message: "...", type: "bot", isThinking: true }]);
         scrollToBottom();
-        const specsPromptMsgs = buildClaudeMessages(conversation, input);
+        const specsPromptMsgs = buildClaudeMessages(conversation, input, currentImage);
         const specsQuestion = await callChatAPI(specsPromptMsgs, newParams, [], "asking_specs");
         setConversation((old) => [...old.slice(0, -1), { message: specsQuestion, type: "bot" }]);
         scrollToBottom();
@@ -266,7 +300,7 @@ export default function BuyShitFast() {
       case "chat": {
         setConversation((old) => [...old, { message: "...", type: "bot", isThinking: true }]);
         scrollToBottom();
-        const msgs = buildClaudeMessages(conversation, input);
+        const msgs = buildClaudeMessages(conversation, input, currentImage);
         const reply = await callChatAPI(msgs, searchParams, searchResults);
         setConversation((old) => [
           ...old.slice(0, -1),
@@ -491,7 +525,7 @@ export default function BuyShitFast() {
                   title={uploadedImage ? "Photo attached — click to change" : "Attach a photo"}
                 >
                   <Paperclip className="h-5 w-5" />
-                  <input type="file" accept="image/png" className="hidden" onChange={handleImageUpload} />
+                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
                 </label>
               </div>
             )}
