@@ -35,10 +35,30 @@ interface SearchParams {
   specs: string;
 }
 
-const GRADIENT_BORDER =
-  "linear-gradient(#2C2C2E, #2C2C2E) padding-box, linear-gradient(to right, #4fc3f7, #81c784, #ffeb3b, #ff9800, #f06292) border-box";
-const GRADIENT_INPUT =
-  "linear-gradient(#262628, #262628) padding-box, linear-gradient(to right, #4fc3f7, #81c784, #ffeb3b, #ff9800, #f06292) border-box";
+// Score arc ring displayed next to each result card
+function ScoreRing({ score }: { score: number }) {
+  const r = 13;
+  const circ = 2 * Math.PI * r;
+  const filled = circ * (score / 100);
+  const color = score >= 80 ? "#4ade80" : score >= 65 ? "#fb923c" : "#f87171";
+  return (
+    <svg width="38" height="38" viewBox="0 0 36 36" className="flex-shrink-0">
+      <circle cx="18" cy="18" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="2.5" />
+      <circle
+        cx="18" cy="18" r={r}
+        fill="none"
+        stroke={color}
+        strokeWidth="2.5"
+        strokeDasharray={`${filled} ${circ - filled}`}
+        strokeLinecap="round"
+        transform="rotate(-90 18 18)"
+      />
+      <text x="18" y="22.5" textAnchor="middle" fontSize="8.5" fontWeight="700" fill={color}>
+        {score}
+      </text>
+    </svg>
+  );
+}
 
 function generateMockResults(item: string, budget: string): ResultCard[] {
   const budgetNum = parseInt(budget.replace(/[^0-9]/g, "")) || 500;
@@ -161,6 +181,12 @@ const INITIAL_MESSAGE: Message = {
   type: "bot",
 };
 
+const conditionColor = {
+  Excellent:  { bg: "#16a34a18", text: "#4ade80" },
+  "Very Good": { bg: "#2563eb18", text: "#60a5fa" },
+  Good:       { bg: "#78716c18", text: "#a8a29e" },
+} as const;
+
 export default function BuyShitFast() {
   const scrollRef = useRef<null | HTMLDivElement>(null);
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
@@ -205,7 +231,6 @@ export default function BuyShitFast() {
     ]);
     scrollToBottom();
 
-    // Kick off the real search immediately, in parallel with the animation
     const searchPromise = fetch("/api/search", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -228,7 +253,6 @@ export default function BuyShitFast() {
       ]);
     }
 
-    // Await the search result (may already be resolved)
     const searchData = await searchPromise;
     const liveResults: ResultCard[] = searchData.results ?? [];
     const results: ResultCard[] =
@@ -311,7 +335,6 @@ export default function BuyShitFast() {
           /\b(actually|instead|changed my mind|want to buy|looking for|find me|i need|how about|what about|i want|search for|buy a|get a|find a|i changed|forget it|nevermind|never mind)\b/i.test(input);
 
         if (!looksLikeBudget && looksLikeNewItem) {
-          // User wants to search for something else — restart the item flow
           const newParams = { item: input, budget: "", specs: "" };
           setSearchParams(newParams);
           setFlowStep("asking_budget");
@@ -409,126 +432,118 @@ export default function BuyShitFast() {
   };
 
   return (
-    <main className="h-screen flex flex-col" style={{ background: "#181614" }}>
-      {/* Scout header */}
-      <div className="w-full flex justify-center items-center py-4 mb-2">
-        <div
-          className="w-16 h-16 flex items-center justify-center text-3xl mr-4 flex-shrink-0"
-          style={{
-            border: "3px solid transparent",
-            borderRadius: "50%",
-            background: GRADIENT_BORDER,
-            backgroundClip: "padding-box, border-box",
-          }}
-        >
-          🔍
+    <main
+      className="h-screen flex flex-col"
+      style={{
+        background: "radial-gradient(ellipse at 20% 0%, rgba(79,70,229,0.28) 0%, transparent 52%), radial-gradient(ellipse at 80% 100%, rgba(16,185,129,0.12) 0%, transparent 50%), #0c0c10",
+      }}
+    >
+      {/* Slim header bar */}
+      <div
+        className="w-full flex items-center justify-between px-6 py-3 flex-shrink-0"
+        style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{
+              background: "rgba(33,150,243,0.12)",
+              border: "1px solid rgba(33,150,243,0.3)",
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="#2196f3" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+              <circle cx="11" cy="11" r="7" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-white font-bold text-lg leading-none">Scout</span>
+            <span className="text-gray-500 text-xs">deal hunter</span>
+          </div>
         </div>
-        <div className="flex flex-col justify-center">
-          <span className="text-white text-2xl font-bold leading-tight">Scout</span>
-          <span className="text-white text-sm font-light tracking-wide mt-1">buy shit fast agent</span>
+        <div className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+          <span className="text-gray-500 text-xs">online</span>
         </div>
       </div>
 
       <ScrollArea ref={scrollRef} className="flex-1 overflow-x-hidden">
-        <div className="flex flex-col gap-1 p-2 max-w-3xl mx-auto">
+        <div className="flex flex-col gap-2 p-4 max-w-3xl mx-auto">
           {conversation.map((msg, i) => (
-            <div key={i} className="flex gap-2 first:mt-2">
+            <div key={i} className="flex gap-2 first:mt-2 msg-slide-in">
               {msg.type === "bot" ? (
                 <div
-                  className="w-full overflow-hidden p-4 rounded-[20px] text-white relative font-medium max-w-[75%] mr-auto"
+                  className="w-full overflow-hidden p-4 text-white relative font-medium max-w-[75%] mr-auto"
                   style={{
-                    border: "3px solid transparent",
-                    borderRadius: "20px",
-                    background: GRADIENT_BORDER,
-                    backgroundClip: "padding-box, border-box",
+                    borderRadius: "14px",
+                    background: "rgba(22,22,30,0.75)",
+                    backdropFilter: "blur(20px)",
+                    WebkitBackdropFilter: "blur(20px)",
+                    border: "1px solid rgba(255,255,255,0.07)",
+                    boxShadow: "0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04)",
                   }}
                 >
                   {msg.isThinking ? (
-                    <span className="inline-block animate-pulse text-2xl">...</span>
+                    <span className="inline-block animate-pulse text-2xl tracking-widest">···</span>
                   ) : (
                     <>
                       <span className="whitespace-pre-wrap break-words">{msg.message}</span>
                       {msg.results && msg.results.length > 0 && (
-                        <div className="flex flex-col gap-3 mt-3 w-full">
+                        <div className="flex flex-col gap-2.5 mt-3 w-full">
                           {msg.results.map((r, ri) => (
                             <a
                               key={ri}
                               href={r.link ?? "#"}
                               target={r.link ? "_blank" : undefined}
                               rel="noopener noreferrer"
-                              className="block rounded-2xl p-3 relative no-underline transition-all hover:opacity-80"
+                              className="block p-3 relative no-underline transition-all hover:brightness-110"
                               style={{
-                                background: "#1a1a1c",
-                                border: "1px solid #3a3a3c",
+                                background: "rgba(255,255,255,0.04)",
+                                backdropFilter: "blur(8px)",
+                                WebkitBackdropFilter: "blur(8px)",
+                                border: "1px solid rgba(255,255,255,0.07)",
+                                borderLeft: ri === 0 ? "3px solid #4ade80" : "3px solid rgba(255,255,255,0.07)",
+                                borderRadius: "12px",
                                 cursor: r.link ? "pointer" : "default",
                               }}
                             >
-                              {ri === 0 && (
-                                <span
-                                  className="absolute -top-2.5 left-3 text-xs font-bold px-2 py-0.5 rounded-full"
-                                  style={{ background: "#16a34a", color: "#fff" }}
-                                >
-                                  Best Deal
-                                </span>
-                              )}
-                              <div className="flex justify-between items-start gap-2 mt-1">
-                                <span className="text-white font-semibold text-sm flex-1 leading-snug">
-                                  {r.title}
-                                </span>
-                                <span
-                                  className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
-                                  style={{
-                                    background:
-                                      r.valueScore >= 80
-                                        ? "#16a34a33"
-                                        : r.valueScore >= 65
-                                        ? "#d9770633"
-                                        : "#dc262633",
-                                    color:
-                                      r.valueScore >= 80
-                                        ? "#4ade80"
-                                        : r.valueScore >= 65
-                                        ? "#fb923c"
-                                        : "#f87171",
-                                  }}
-                                >
-                                  {r.valueScore}% deal
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between mt-0.5">
-                                <span className="text-gray-500 text-xs">
-                                  {r.platform} · 📍 {r.location}
-                                </span>
-                                {r.link && (
-                                  <span className="text-[#2196f3] text-xs font-medium">
-                                    View listing ↗
-                                  </span>
+                              <div className="flex gap-3 items-start">
+                                {r.image && (
+                                  <img
+                                    src={r.image}
+                                    alt={r.title}
+                                    className="w-14 h-14 rounded-lg object-cover flex-shrink-0"
+                                  />
                                 )}
-                              </div>
-                              <div className="flex justify-between items-end mt-2">
-                                <div className="flex items-baseline gap-2">
-                                  <span className="text-[#2196f3] text-xl font-bold">{r.price}</span>
-                                  <span className="text-green-400 text-xs">{r.savings}</span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <span className="text-white font-semibold text-sm leading-snug flex-1">
+                                      {r.title}
+                                    </span>
+                                    <ScoreRing score={r.valueScore} />
+                                  </div>
+                                  <span className="text-gray-500 text-xs">
+                                    {r.platform} · 📍 {r.location}
+                                  </span>
+                                  <div className="flex items-baseline gap-2 mt-1.5">
+                                    <span className="text-[#2196f3] text-lg font-bold">{r.price}</span>
+                                    <span className="text-green-400 text-xs">{r.savings}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between mt-1">
+                                    <span
+                                      className="text-xs px-2 py-0.5 rounded-full"
+                                      style={{
+                                        background: conditionColor[r.condition].bg,
+                                        color: conditionColor[r.condition].text,
+                                      }}
+                                    >
+                                      {r.condition}
+                                    </span>
+                                    {r.link && (
+                                      <span className="text-[#2196f3] text-xs font-medium">View ↗</span>
+                                    )}
+                                  </div>
                                 </div>
-                                <span
-                                  className="text-xs px-2 py-0.5 rounded-full"
-                                  style={{
-                                    background:
-                                      r.condition === "Excellent"
-                                        ? "#16a34a22"
-                                        : r.condition === "Very Good"
-                                        ? "#2563eb22"
-                                        : "#78716c22",
-                                    color:
-                                      r.condition === "Excellent"
-                                        ? "#4ade80"
-                                        : r.condition === "Very Good"
-                                        ? "#60a5fa"
-                                        : "#a8a29e",
-                                  }}
-                                >
-                                  {r.condition}
-                                </span>
                               </div>
                             </a>
                           ))}
@@ -538,7 +553,17 @@ export default function BuyShitFast() {
                   )}
                 </div>
               ) : (
-                <div className="max-w-[60%] flex flex-col text-white bg-[#2196f3] ml-auto items-start gap-2 rounded-[20px] p-4 text-left text-base font-medium transition-all">
+                <div
+                  className="max-w-[60%] flex flex-col text-white ml-auto items-start gap-2 p-4 text-left text-base font-medium"
+                  style={{
+                    borderRadius: "14px",
+                    background: "rgba(33,150,243,0.88)",
+                    backdropFilter: "blur(8px)",
+                    WebkitBackdropFilter: "blur(8px)",
+                    border: "1px solid rgba(255,255,255,0.15)",
+                    boxShadow: "0 4px 20px rgba(33,150,243,0.22)",
+                  }}
+                >
                   {msg.images?.map((src, ii) => (
                     <img key={ii} src={src} alt="attached" className="w-full rounded-xl object-cover max-h-48" />
                   ))}
@@ -553,30 +578,32 @@ export default function BuyShitFast() {
 
       {/* Input bar */}
       <div className="w-full sm:max-w-3xl mx-auto">
-        <div className="p-8">
+        <div className="p-6">
           <div
-            className="flex flex-row items-center gap-4 border-none px-4 py-3"
+            className="input-container flex flex-row items-center gap-4 px-4 py-3"
             style={{
-              border: "3px solid transparent",
-              borderRadius: "40px",
-              background: GRADIENT_INPUT,
-              backgroundClip: "padding-box, border-box",
+              border: "1px solid rgba(255,255,255,0.09)",
+              borderRadius: "16px",
+              background: "rgba(22,22,30,0.8)",
+              backdropFilter: "blur(20px)",
+              WebkitBackdropFilter: "blur(20px)",
+              boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
             }}
           >
             <button
               type="button"
               onClick={handleReset}
-              className="flex items-center justify-center h-12 w-12 rounded-full focus:outline-none transition-opacity hover:opacity-70"
+              className="flex items-center justify-center h-10 w-10 rounded-full focus:outline-none transition-all hover:opacity-70 hover:scale-110 active:scale-95"
               style={{ color: "#2196f3" }}
               tabIndex={0}
               aria-label="Start new search"
               title="Start new search"
             >
-              <RefreshCw className="h-6 w-6" />
+              <RefreshCw className="h-5 w-5" />
             </button>
 
             <AutosizeTextarea
-              className="flex-1 outline-none border-0 bg-transparent text-white placeholder-gray-400 text-2xl px-0"
+              className="flex-1 outline-none border-0 bg-transparent text-white placeholder-gray-500 text-xl px-0"
               placeholder={getPlaceholder()}
               minHeight={25}
               maxHeight={55}
@@ -604,7 +631,7 @@ export default function BuyShitFast() {
                   </div>
                 )}
                 <label
-                  className="flex items-center cursor-pointer transition-colors"
+                  className="flex items-center cursor-pointer transition-all hover:scale-110"
                   style={{ color: uploadedImage ? "#4fc3f7" : "#6b7280" }}
                   title={uploadedImage ? "Photo attached — click to change" : "Attach a photo"}
                 >
@@ -617,8 +644,8 @@ export default function BuyShitFast() {
             <Button
               onClick={handleSendMessage}
               disabled={flowStep === "searching" || !userInput.trim()}
-              className="h-12 w-12 p-0 bg-[#2196f3] hover:bg-blue-600 rounded-full flex items-center justify-center"
-              style={{ minWidth: 48, minHeight: 48 }}
+              className="h-10 w-10 p-0 bg-[#2196f3] hover:bg-blue-500 rounded-full flex items-center justify-center transition-all hover:scale-110 active:scale-95 hover:shadow-[0_0_16px_rgba(33,150,243,0.5)]"
+              style={{ minWidth: 40, minHeight: 40 }}
               aria-label="Send message"
             >
               <svg
@@ -629,7 +656,7 @@ export default function BuyShitFast() {
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="h-6 w-6 text-white"
+                className="h-5 w-5 text-white"
               >
                 <line x1="22" y1="2" x2="11" y2="13" />
                 <polygon points="22 2 15 22 11 13 2 9 22 2" />
