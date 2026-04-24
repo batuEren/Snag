@@ -41,6 +41,7 @@ export default function NegotiationCopilot({ listing, onClose }: NegotiationCopi
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [step, setStep] = useState<"input" | "results">("input");
   const [error, setError] = useState<string | null>(null);
+  const [language, setLanguage] = useState<"nl" | "en">("nl");
 
   const handleGenerate = async () => {
     if (!targetPrice.trim() || loading) return;
@@ -50,7 +51,7 @@ export default function NegotiationCopilot({ listing, onClose }: NegotiationCopi
       const res = await fetch("/api/negotiate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ listing, targetPrice }),
+        body: JSON.stringify({ listing, targetPrice, language }),
       });
       const data = await res.json();
       if (data.drafts && data.drafts.length > 0) {
@@ -115,16 +116,36 @@ export default function NegotiationCopilot({ listing, onClose }: NegotiationCopi
             </div>
             <div>
               <h2 className="text-white font-bold text-sm leading-none">Negotiation Copilot</h2>
-              <p className="text-gray-500 text-xs mt-0.5">Ghost-write your offer in Dutch</p>
+              <p className="text-gray-500 text-xs mt-0.5">Ghost-write your offer in {language === "nl" ? "Dutch" : "English"}</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-white transition-colors w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/5 text-lg leading-none"
-            aria-label="Close"
-          >
-            ×
-          </button>
+          <div className="flex items-center gap-2">
+            <div
+              className="flex items-center rounded-lg overflow-hidden text-xs font-semibold"
+              style={{ border: "1px solid rgba(255,255,255,0.11)" }}
+            >
+              {(["nl", "en"] as const).map((lang) => (
+                <button
+                  key={lang}
+                  onClick={() => { setLanguage(lang); setStep("input"); setDrafts([]); }}
+                  className="px-2.5 py-1 transition-colors"
+                  style={{
+                    background: language === lang ? "rgba(33,150,243,0.25)" : "transparent",
+                    color: language === lang ? "#60a5fa" : "#6b7280",
+                  }}
+                >
+                  {lang === "nl" ? "🇳🇱 NL" : "🇬🇧 EN"}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={onClose}
+              className="text-gray-500 hover:text-white transition-colors w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/5 text-lg leading-none"
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </div>
         </div>
 
         <div className="p-5 flex flex-col gap-4">
@@ -200,7 +221,7 @@ export default function NegotiationCopilot({ listing, onClose }: NegotiationCopi
               <div className="flex items-center justify-between">
                 <span className="text-white font-semibold text-sm">
                   3 Message Drafts{" "}
-                  <span className="text-gray-500 font-normal text-xs">(written in Dutch)</span>
+                  <span className="text-gray-500 font-normal text-xs">(written in {language === "nl" ? "Dutch" : "English"})</span>
                 </span>
                 <button
                   onClick={() => { setStep("input"); setDrafts([]); }}
