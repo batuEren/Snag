@@ -474,7 +474,7 @@ export default function BuyShitFast() {
           /\b(any|whatever|flexible|open|no limit|no budget|doesn't matter|don't care|idc)\b/i.test(input);
 
         const looksLikeNewItem = !!currentImage ||
-          /\b(actually|instead|changed my mind|want to buy|looking for|find me|i need|how about|what about|i want|search for|buy a|get a|find a|i changed|forget it|nevermind|never mind)\b/i.test(input);
+          /\b(actually|instead|changed my mind|want to buy|find me|i need|how about|what about|search for|buy a|get a|find a|i changed|forget it|nevermind|never mind)\b/i.test(input);
 
         if (!looksLikeBudget && looksLikeNewItem) {
           const newParams = { item: input, budget: "", specs: "" };
@@ -512,7 +512,7 @@ export default function BuyShitFast() {
 
       case "asking_specs": {
         const looksLikeNewItemInSpecs = !!currentImage ||
-          /\b(actually|instead|changed my mind|want to buy|looking for|find me|i need|how about|what about|i want|search for|buy a|get a|find a|i changed|forget it|nevermind|never mind)\b/i.test(input);
+          /\b(actually|instead|changed my mind|want to buy|find me|i need|how about|what about|search for|buy a|get a|find a|i changed|forget it|nevermind|never mind)\b/i.test(input);
 
         if (looksLikeNewItemInSpecs) {
           const newParams = { item: input, budget: "", specs: "" };
@@ -536,8 +536,16 @@ export default function BuyShitFast() {
       }
 
       case "chat": {
+        const reRunIntent =
+          /\b(search again|refetch|re-?search|try again|redo (?:the )?search|search again on)\b/i.test(input);
+
+        if (reRunIntent && searchParams.item && searchParams.budget) {
+          setTimeout(() => runSearch(searchParams), 200);
+          break;
+        }
+
         const newSearchIntent =
-          /\b(search(?:ing)? (?:for|again)|find (?:me |a |an |some )|look(?:ing)? for|show me (?:a |some |listings? for|more (?:listings?|deals?|results?|offers?))|i want (?:to buy|to find|to search)|i(?:'m| am) looking for|can you (?:find|search|look for)|also (?:find|search|look for)|what about (?:buying |finding |searching for )?(?:a |an )?|how about (?:a |an )?|refetch|(?:get|show|fetch|find) (?:me )?(?:more|new|different|other|fresh) (?:listings?|results?|offers?|deals?)|new search|start (?:a )?(?:new )?search|search for something|try (?:a )?different)\b/i.test(input);
+          /\b(search(?:ing)? for|find (?:me |a |an |some )|look(?:ing)? for|show me (?:a |some |listings? for|more (?:listings?|deals?|results?|offers?))|i want (?:to buy|to find|to search)|i(?:'m| am) looking for|can you (?:find|search|look for)|also (?:find|search|look for)|what about (?:buying |finding |searching for )?(?:a |an )?|how about (?:a |an )?|(?:get|show|fetch|find) (?:me )?(?:more|new|different|other|fresh) (?:listings?|results?|offers?|deals?)|new search|start (?:a )?(?:new )?search|search for something|try (?:a )?different)\b/i.test(input);
 
         if (newSearchIntent) {
           setConversation((old) => [...old, { message: "...", type: "bot", isThinking: true }]);
