@@ -19,6 +19,7 @@ interface Draft {
 interface NegotiationCopilotProps {
   listing: Listing;
   onClose: () => void;
+  initialTargetPrice?: string;
 }
 
 const STYLE_META: Record<string, { emoji: string; color: string; bg: string; border: string }> = {
@@ -34,8 +35,8 @@ function suggestedPrice(price: string): string {
   return `e.g. ${symbol}${Math.round(numeric * 0.8)}`;
 }
 
-export default function NegotiationCopilot({ listing, onClose }: NegotiationCopilotProps) {
-  const [targetPrice, setTargetPrice] = useState("");
+export default function NegotiationCopilot({ listing, onClose, initialTargetPrice }: NegotiationCopilotProps) {
+  const [targetPrice, setTargetPrice] = useState(initialTargetPrice ?? "");
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [loading, setLoading] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
