@@ -253,6 +253,8 @@ export default function BuyShitFast() {
     return crypto.randomUUID();
   });
 
+  const currentSessionIdRef = useRef(currentSessionId);
+
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -269,6 +271,11 @@ export default function BuyShitFast() {
     searching:     "Searching for deals…",
     chat:          "Ask Scout anything…",
   };
+
+  // Keep ref in sync so async closures can read the latest session id
+  useEffect(() => {
+    currentSessionIdRef.current = currentSessionId;
+  }, [currentSessionId]);
 
   // Persist sessions to localStorage
   useEffect(() => {
@@ -309,6 +316,20 @@ export default function BuyShitFast() {
 
   const scrollToBottom = () => {
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+  };
+
+  // Update conversation for a specific session — if it's the active one, update live state;
+  // otherwise patch the persisted session store so the user sees it when they switch back.
+  const setConversationForSession = (sessionId: string, updater: (old: Message[]) => Message[]) => {
+    if (sessionId === currentSessionIdRef.current) {
+      setConversation(updater);
+    } else {
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id !== sessionId ? s : { ...s, conversation: updater(s.conversation), updatedAt: Date.now() }
+        )
+      );
+    }
   };
 
   const addMessage = (message: Message) => {
@@ -364,14 +385,14 @@ export default function BuyShitFast() {
     }
   };
 
-  const runSearch = async (params: SearchParams) => {
-    setFlowStep("searching");
+  const runSearch = async (params: SearchParams, sessionId: string) => {
+    if (sessionId === currentSessionIdRef.current) setFlowStep("searching");
 
-    setConversation((old) => [
+    setConversationForSession(sessionId, (old) => [
       ...old,
       { message: "On it! Scanning the best second-hand platforms...", type: "bot", isThinking: true },
     ]);
-    scrollToBottom();
+    if (sessionId === currentSessionIdRef.current) scrollToBottom();
 
     const searchPromise = fetch("/api/search", {
       method: "POST",
@@ -389,7 +410,7 @@ export default function BuyShitFast() {
 
     for (const [ms, msg] of steps) {
       await new Promise<void>((r) => setTimeout(r, ms));
-      setConversation((old) => [
+      setConversationForSession(sessionId, (old) => [
         ...old.slice(0, -1),
         { message: msg, type: "bot", isThinking: true },
       ]);
@@ -402,9 +423,9 @@ export default function BuyShitFast() {
 
     await new Promise<void>((r) => setTimeout(r, 500));
 
-    setSearchResults(results);
+    if (sessionId === currentSessionIdRef.current) setSearchResults(results);
 
-    setConversation((old) => [
+    setConversationForSession(sessionId, (old) => [
       ...old.slice(0, -1),
       {
         message: `Found ${results.length} great deals matching your criteria! Here are the best ones:`,
@@ -412,21 +433,29 @@ export default function BuyShitFast() {
         results,
       },
     ]);
-    scrollToBottom();
+    if (sessionId === currentSessionIdRef.current) scrollToBottom();
 
     await new Promise<void>((r) => setTimeout(r, 500));
 
     const summaryMessages = buildClaudeMessages([], `I found ${results.length} deals for a ${params.item} within ${params.budget}. Give a short summary of the best pick and offer to help.`);
     const summaryReply = await callChatAPI(summaryMessages, params, results);
 
-    setConversation((old) => [
+    setConversationForSession(sessionId, (old) => [
       ...old,
       { message: summaryReply, type: "bot" },
     ]);
-    setInputHint(hintForStep["chat"]);
-    scrollToBottom();
 
-    setFlowStep("chat");
+    if (sessionId === currentSessionIdRef.current) {
+      setInputHint(hintForStep["chat"]);
+      scrollToBottom();
+      setFlowStep("chat");
+    } else {
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id !== sessionId ? s : { ...s, flowStep: "chat" as FlowStep, searchResults: results }
+        )
+      );
+    }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -449,6 +478,8 @@ export default function BuyShitFast() {
     const input = userInput.trim();
     if (!input || flowStep === "searching") return;
 
+    const sessionId = currentSessionId;
+
     const currentImage = uploadedImage;
     setUploadedImage(null);
     setUserInput("");
@@ -463,9 +494,11 @@ export default function BuyShitFast() {
         scrollToBottom();
         const budgetPromptMsgs = buildClaudeMessages(conversation, input, currentImage);
         const budgetQuestion = await callChatAPI(budgetPromptMsgs, newParams, [], "asking_budget");
-        setConversation((old) => [...old.slice(0, -1), { message: budgetQuestion, type: "bot" }]);
-        setInputHint(hintForStep["asking_budget"]);
-        scrollToBottom();
+        setConversationForSession(sessionId, (old) => [...old.slice(0, -1), { message: budgetQuestion, type: "bot" }]);
+        if (sessionId === currentSessionIdRef.current) {
+          setInputHint(hintForStep["asking_budget"]);
+          scrollToBottom();
+        }
         break;
       }
 
@@ -484,16 +517,18 @@ export default function BuyShitFast() {
           scrollToBottom();
           const redirectMsgs = buildClaudeMessages(conversation, input, currentImage);
           const budgetQuestion = await callChatAPI(redirectMsgs, newParams, [], "asking_budget");
-          setConversation((old) => [...old.slice(0, -1), { message: budgetQuestion, type: "bot" }]);
-          setInputHint(hintForStep["asking_budget"]);
-          scrollToBottom();
+          setConversationForSession(sessionId, (old) => [...old.slice(0, -1), { message: budgetQuestion, type: "bot" }]);
+          if (sessionId === currentSessionIdRef.current) {
+            setInputHint(hintForStep["asking_budget"]);
+            scrollToBottom();
+          }
           break;
         }
 
         if (!looksLikeBudget) {
           const nudge = "I need a rough budget to find you the best deals! Even a range like €100–300 or just 'any' works fine.";
-          setConversation((old) => [...old, { message: nudge, type: "bot" }]);
-          scrollToBottom();
+          setConversationForSession(sessionId, (old) => [...old, { message: nudge, type: "bot" }]);
+          if (sessionId === currentSessionIdRef.current) scrollToBottom();
           break;
         }
 
@@ -504,9 +539,11 @@ export default function BuyShitFast() {
         scrollToBottom();
         const specsPromptMsgs = buildClaudeMessages(conversation, input, currentImage);
         const specsQuestion = await callChatAPI(specsPromptMsgs, newParams, [], "asking_specs");
-        setConversation((old) => [...old.slice(0, -1), { message: specsQuestion, type: "bot" }]);
-        setInputHint(hintForStep["asking_specs"]);
-        scrollToBottom();
+        setConversationForSession(sessionId, (old) => [...old.slice(0, -1), { message: specsQuestion, type: "bot" }]);
+        if (sessionId === currentSessionIdRef.current) {
+          setInputHint(hintForStep["asking_specs"]);
+          scrollToBottom();
+        }
         break;
       }
 
@@ -522,16 +559,18 @@ export default function BuyShitFast() {
           scrollToBottom();
           const redirectMsgs = buildClaudeMessages(conversation, input, currentImage);
           const budgetQuestion = await callChatAPI(redirectMsgs, newParams, [], "asking_budget");
-          setConversation((old) => [...old.slice(0, -1), { message: budgetQuestion, type: "bot" }]);
-          setInputHint(hintForStep["asking_budget"]);
-          scrollToBottom();
+          setConversationForSession(sessionId, (old) => [...old.slice(0, -1), { message: budgetQuestion, type: "bot" }]);
+          if (sessionId === currentSessionIdRef.current) {
+            setInputHint(hintForStep["asking_budget"]);
+            scrollToBottom();
+          }
           break;
         }
 
         const specs = input.toLowerCase() === "any" ? "" : input;
         const fullParams = { ...searchParams, specs };
         setSearchParams(fullParams);
-        setTimeout(() => runSearch(fullParams), 200);
+        setTimeout(() => runSearch(fullParams, sessionId), 200);
         break;
       }
 
@@ -540,7 +579,7 @@ export default function BuyShitFast() {
           /\b(search again|refetch|re-?search|try again|redo (?:the )?search|search again on)\b/i.test(input);
 
         if (reRunIntent && searchParams.item && searchParams.budget) {
-          setTimeout(() => runSearch(searchParams), 200);
+          setTimeout(() => runSearch(searchParams, sessionId), 200);
           break;
         }
 
@@ -554,13 +593,17 @@ export default function BuyShitFast() {
           const rawItem = await callChatAPI(extractMsgs, searchParams, [], "extract_item");
           const cleanItem = rawItem.trim().replace(/[.!?,]$/, "") || input;
           const newParams = { item: cleanItem, budget: "", specs: "" };
-          setSearchParams(newParams);
-          setFlowStep("asking_budget");
+          if (sessionId === currentSessionIdRef.current) {
+            setSearchParams(newParams);
+            setFlowStep("asking_budget");
+          }
           const budgetMsgs = buildClaudeMessages(conversation, input, currentImage);
           const budgetQuestion = await callChatAPI(budgetMsgs, newParams, [], "asking_budget");
-          setConversation((old) => [...old.slice(0, -1), { message: budgetQuestion, type: "bot" }]);
-          setInputHint(hintForStep["asking_budget"]);
-          scrollToBottom();
+          setConversationForSession(sessionId, (old) => [...old.slice(0, -1), { message: budgetQuestion, type: "bot" }]);
+          if (sessionId === currentSessionIdRef.current) {
+            setInputHint(hintForStep["asking_budget"]);
+            scrollToBottom();
+          }
           break;
         }
 
@@ -568,12 +611,14 @@ export default function BuyShitFast() {
         scrollToBottom();
         const msgs = buildClaudeMessages(conversation, input, currentImage);
         const reply = await callChatAPI(msgs, searchParams, searchResults);
-        setConversation((old) => [
+        setConversationForSession(sessionId, (old) => [
           ...old.slice(0, -1),
           { message: reply, type: "bot" },
         ]);
-        setInputHint(hintForStep["chat"]);
-        scrollToBottom();
+        if (sessionId === currentSessionIdRef.current) {
+          setInputHint(hintForStep["chat"]);
+          scrollToBottom();
+        }
         break;
       }
     }
