@@ -109,18 +109,23 @@ async function parseWishlistWithClaude(
 ): Promise<WishlistAttributes> {
   const prompt = `Extract buyer intent from this marketplace search request.
 
-Item: "${item}"
+WHAT THE BUYER WANTS TO BUY: "${item}"
 Budget: "${budget}"
-Additional specs: "${specs}"
+Buyer preferences/specs (refinements only — NOT a new item): "${specs}"
+
+IMPORTANT RULES:
+- If an image is provided, it shows WHAT the buyer wants to buy. Use the image to identify the item category — the "specs" field only adds preferences, it never changes the item type.
+- "category" must be the item in the image/item field, never something mentioned only in specs.
+- Interpret specs as adjectives/preferences (e.g. "overall" = best overall value, "any" = no preference, "fast" = performance preference).
 
 Return ONLY a JSON object with these exact fields (no markdown, no explanation):
 {
-  "category": one of [bike, phone, laptop, camera, tv, console, headphones, any],
+  "category": the main item type as a short English noun (e.g. "motorcycle", "bicycle", "laptop", "phone", "camera", "tv", "console", "headphones", "car", "scooter") — be specific, derive from image/item field only,
   "color": color preference as a lowercase string or null,
   "budget_max": numeric max budget in euros (default 500 if unclear),
   "budget_min": numeric min budget in euros (default 0),
   "condition_pref": one of [any, Excellent, Very Good, Good],
-  "tags": array of relevant search keywords (e.g. ["mountain", "hardtail", "disc"])
+  "tags": array of 3-6 search keywords describing the item (model names, subtypes, specs from the image/item — NOT from the specs/preferences field)
 }`;
 
   const content: Anthropic.MessageParam["content"] = [];
@@ -259,8 +264,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const attrs = await parseWishlistWithClaude(item, budget, specs ?? "", imageBase64);
 
     // Step B: fetch real Marktplaats listings
-    const queryParts = [item, specs].filter((s) => s && String(s).toLowerCase() !== "any");
-    const query = queryParts.join(" ").trim() || item;
+    // Build query from Claude-parsed intent — never use raw user text (may be "I wanna buy this" etc.)
+    const queryParts = [
+      attrs.category,
+      ...(attrs.tags ?? []).slice(0, 3),
+      attrs.color ?? "",
+    ].filter(Boolean);
+    const query = queryParts.join(" ").trim() || attrs.category;
 
     let listings: RawListing[];
     try {
@@ -278,31 +288,41 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const scores = await scoreListingsWithClaude(listings, attrs, imageBase64);
     const scoreMap = new Map(scores.map((s) => [s.id, s]));
 
-    // Step D: compute final scores, format, and sort
-    const scored = listings.map((listing) => {
-      const s = scoreMap.get(listing.id) ?? { text_score: 0.5, visual_score: 0.5 };
-      const combined = imageBase64
-        ? s.text_score * 0.6 + s.visual_score * 0.4
-        : s.text_score;
-      const priceSavingsPct = attrs.budget_max > 0 ? Math.max(0, 1 - listing.price / attrs.budget_max) : 0;
-      const valueScore = Math.min(100, Math.round(combined * 60 + priceSavingsPct * 40));
-      const savedAmount = Math.max(0, Math.round(attrs.budget_max - listing.price));
-      return {
-        title: listing.title,
-        platform: listing.platform,
-        price: `€${listing.price.toFixed(0)}`,
-        condition: listing.condition,
-        valueScore,
-        savings: savedAmount > 0 ? `€${savedAmount} under budget` : "At budget",
-        location: listing.location,
-        link: listing.link,
-        image: listing.image_url || undefined,
-        _score: combined,
-      };
-    });
+    // Step D: filter irrelevant listings, compute final scores, format, and sort
+    const MIN_RELEVANCE = 0.55; // drop listings Claude considers a poor match
+
+    const scored = listings
+      .map((listing) => {
+        const s = scoreMap.get(listing.id) ?? { text_score: 0, visual_score: 0.5 };
+        const combined = imageBase64
+          ? s.text_score * 0.6 + s.visual_score * 0.4
+          : s.text_score;
+        // Price savings is a tiebreaker only — relevance dominates (80/20)
+        const priceSavingsPct = attrs.budget_max > 0 ? Math.max(0, 1 - listing.price / attrs.budget_max) : 0;
+        const valueScore = Math.min(100, Math.round(combined * 80 + priceSavingsPct * 20));
+        const savedAmount = Math.max(0, Math.round(attrs.budget_max - listing.price));
+        return {
+          title: listing.title,
+          platform: listing.platform,
+          price: `€${listing.price.toFixed(0)}`,
+          condition: listing.condition,
+          valueScore,
+          savings: savedAmount > 0 ? `€${savedAmount} under budget` : "At budget",
+          location: listing.location,
+          link: listing.link,
+          image: listing.image_url || undefined,
+          _score: combined,
+          _textScore: s.text_score,
+        };
+      })
+      .filter((r) => r._textScore >= MIN_RELEVANCE);
+
+    if (scored.length === 0) {
+      return NextResponse.json({ results: [] });
+    }
 
     scored.sort((a, b) => b._score - a._score);
-    const results = scored.slice(0, 6).map(({ _score, ...r }) => r);
+    const results = scored.slice(0, 6).map(({ _score, _textScore, ...r }) => r);
 
     return NextResponse.json({ results });
   } catch (err) {

@@ -491,11 +491,25 @@ export default function BuyShitFast() {
     }
 
     const searchData = await searchPromise;
-    const liveResults: ResultCard[] = searchData.results ?? [];
-    const results: ResultCard[] =
-      liveResults.length > 0 ? liveResults : generateMockResults(params.item, params.budget);
+    const results: ResultCard[] = searchData.results ?? [];
 
     await new Promise<void>((r) => setTimeout(r, 500));
+
+    if (results.length === 0) {
+      setConversationForSession(sessionId, (old) => [
+        ...old.slice(0, -1),
+        {
+          message: `Oops, I couldn't find any ${params.item} listings that matched what you're looking for. Want to try different specs or a broader search?`,
+          type: "bot",
+        },
+      ]);
+      if (sessionId === currentSessionIdRef.current) {
+        setInputHint(hintForStep["chat"]);
+        scrollToBottom();
+        setFlowStep("chat");
+      }
+      return;
+    }
 
     if (sessionId === currentSessionIdRef.current) setSearchResults(results);
 
@@ -622,7 +636,7 @@ export default function BuyShitFast() {
       }
 
       case "asking_specs": {
-        const looksLikeNewItemInSpecs = !!currentImage ||
+        const looksLikeNewItemInSpecs =
           /\b(actually|instead|changed my mind|want to buy|find me|i need|how about|what about|search for|buy a|get a|find a|i changed|forget it|nevermind|never mind)\b/i.test(input);
 
         if (looksLikeNewItemInSpecs) {
