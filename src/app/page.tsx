@@ -443,30 +443,32 @@ export default function BuyShitFast() {
   const [negotiatingListing, setNegotiatingListing] = useState<NegotiationTarget | null>(null);
   const [negotiatingInitialPrice, setNegotiatingInitialPrice] = useState<string | undefined>(undefined);
 
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window === "undefined") return "dark";
-    return (localStorage.getItem("scout_theme") as Theme) || "dark";
-  });
+  const [theme, setTheme] = useState<Theme>("dark");
 
   useEffect(() => {
-    if (typeof window !== "undefined") localStorage.setItem("scout_theme", theme);
+    const saved = localStorage.getItem("scout_theme") as Theme | null;
+    if (saved) setTheme(saved);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("scout_theme", theme);
   }, [theme]);
 
-  const [currentSessionId, setCurrentSessionId] = useState<string>(() => {
-    if (typeof window === "undefined") return "default";
-    return crypto.randomUUID();
-  });
+  const [currentSessionId, setCurrentSessionId] = useState<string>("default");
 
   const currentSessionIdRef = useRef(currentSessionId);
 
-  const [sessions, setSessions] = useState<ChatSession[]>(() => {
-    if (typeof window === "undefined") return [];
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+
+  useEffect(() => {
+    setCurrentSessionId(crypto.randomUUID());
     try {
-      return JSON.parse(localStorage.getItem("scout_sessions") || "[]");
+      const saved = JSON.parse(localStorage.getItem("scout_sessions") || "[]");
+      setSessions(saved);
     } catch {
-      return [];
+      // ignore malformed data
     }
-  });
+  }, []);
 
   const hintForStep: Record<FlowStep, string> = {
     asking_item:   "What would you like to buy?",
@@ -621,11 +623,25 @@ export default function BuyShitFast() {
     }
 
     const searchData = await searchPromise;
-    const liveResults: ResultCard[] = searchData.results ?? [];
-    const results: ResultCard[] =
-      liveResults.length > 0 ? liveResults : generateMockResults(params.item, params.budget);
+    const results: ResultCard[] = searchData.results ?? [];
 
     await new Promise<void>((r) => setTimeout(r, 500));
+
+    if (results.length === 0) {
+      setConversationForSession(sessionId, (old) => [
+        ...old.slice(0, -1),
+        {
+          message: `Oops, I couldn't find any ${params.item} listings that matched what you're looking for. Want to try different specs or a broader search?`,
+          type: "bot",
+        },
+      ]);
+      if (sessionId === currentSessionIdRef.current) {
+        setInputHint(hintForStep["chat"]);
+        scrollToBottom();
+        setFlowStep("chat");
+      }
+      return;
+    }
 
     if (sessionId === currentSessionIdRef.current) setSearchResults(results);
 
@@ -814,7 +830,7 @@ export default function BuyShitFast() {
       }
 
       case "asking_specs": {
-        const looksLikeNewItemInSpecs = !!currentImage ||
+        const looksLikeNewItemInSpecs =
           /\b(actually|instead|changed my mind|want to buy|find me|i need|how about|what about|search for|buy a|get a|find a|i changed|forget it|nevermind|never mind)\b/i.test(input);
 
         if (looksLikeNewItemInSpecs) {
