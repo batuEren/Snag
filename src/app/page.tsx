@@ -4,7 +4,7 @@ import { AutosizeTextarea } from "@/components/ui/autosize-textarea";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { KeyboardEvent, useEffect, useRef, useState } from "react";
-import { RefreshCw, Paperclip, Plus, MessageSquare, X } from "lucide-react";
+import { RefreshCw, Paperclip, Plus, MessageSquare, X, Sun, Moon, ChevronDown } from "lucide-react";
 import React from "react";
 import NegotiationCopilot from "@/components/NegotiationCopilot";
 
@@ -29,6 +29,7 @@ interface Message {
 }
 
 type FlowStep = "asking_item" | "asking_budget" | "asking_specs" | "searching" | "chat";
+type Theme = "dark" | "light" | "hc";
 
 interface SearchParams {
   item: string;
@@ -76,7 +77,7 @@ function ScoreRing({ score }: { score: number }) {
   const color = score >= 80 ? "#4ade80" : score >= 65 ? "#fb923c" : "#f87171";
   return (
     <svg width="38" height="38" viewBox="0 0 36 36" className="flex-shrink-0">
-      <circle cx="18" cy="18" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="2.5" />
+      <circle cx="18" cy="18" r={r} fill="none" style={{ stroke: "var(--color-score-track)" }} strokeWidth="2.5" />
       <circle
         cx="18" cy="18" r={r}
         fill="none"
@@ -144,6 +145,70 @@ function generateMockResults(item: string, budget: string): ResultCard[] {
     savings: `Save €${Math.round(budgetNum * retailMultipliers[i])} vs retail`,
     location: locations[i],
   }));
+}
+
+function ThemeSelector({ theme, onThemeChange }: { theme: Theme; onThemeChange: (t: Theme) => void }) {
+  const [open, setOpen] = useState(false);
+
+  const options: { value: Theme; label: string; icon: React.ReactNode }[] = [
+    { value: "dark",  label: "Dark",          icon: <Moon className="h-3.5 w-3.5" /> },
+    { value: "light", label: "Light",         icon: <Sun  className="h-3.5 w-3.5" /> },
+    { value: "hc",    label: "High Contrast", icon: <span className="text-[10px] font-bold leading-none">HC</span> },
+  ];
+
+  const current = options.find((o) => o.value === theme)!;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all"
+        style={{
+          background: "var(--bg-theme-btn)",
+          border: "1px solid var(--border-theme-btn)",
+          color: "var(--color-text-secondary)",
+        }}
+      >
+        {current.icon}
+        <span>{current.label}</span>
+        <ChevronDown className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 top-full mt-1 rounded-xl overflow-hidden z-50 min-w-[140px]"
+          style={{
+            background: "var(--bg-theme-dropdown)",
+            border: "1px solid var(--border-theme-dropdown)",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.3)",
+          }}
+        >
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              onMouseDown={() => { onThemeChange(opt.value); setOpen(false); }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-left transition-all"
+              style={{
+                color: "var(--color-text-secondary)",
+                background: opt.value === theme ? "var(--bg-theme-option-active)" : "transparent",
+              }}
+              onMouseEnter={(e) => {
+                if (opt.value !== theme)
+                  (e.currentTarget as HTMLElement).style.background = "var(--bg-theme-option-hover)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.background =
+                  opt.value === theme ? "var(--bg-theme-option-active)" : "transparent";
+              }}
+            >
+              {opt.icon}
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 type ContentBlock =
@@ -226,7 +291,7 @@ async function callChatAPI(
 }
 
 const INITIAL_MESSAGE: Message = {
-  message: "Hey! I'm Scout, your personal deal hunter 🔍 What are you looking to buy today?",
+  message: "Hey! I'm Snag, your personal deal hunter 🔍 What are you looking to buy today?",
   type: "bot",
 };
 
@@ -247,6 +312,15 @@ export default function BuyShitFast() {
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [inputHint, setInputHint] = useState("What would you like to buy?");
   const [negotiatingListing, setNegotiatingListing] = useState<ResultCard | null>(null);
+
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === "undefined") return "dark";
+    return (localStorage.getItem("scout_theme") as Theme) || "dark";
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") localStorage.setItem("scout_theme", theme);
+  }, [theme]);
 
   const [currentSessionId, setCurrentSessionId] = useState<string>(() => {
     if (typeof window === "undefined") return "default";
@@ -269,7 +343,7 @@ export default function BuyShitFast() {
     asking_budget: "Your budget (e.g. €300)",
     asking_specs:  "Requirements, or 'any' to skip",
     searching:     "Searching for deals…",
-    chat:          "Ask Scout anything…",
+    chat:          "Ask Snag anything…",
   };
 
   // Keep ref in sync so async closures can read the latest session id
@@ -640,17 +714,15 @@ export default function BuyShitFast() {
 
   return (
     <main
-      className="h-screen flex flex-row overflow-hidden"
-      style={{
-        background: "radial-gradient(ellipse at 20% 0%, rgba(79,70,229,0.28) 0%, transparent 52%), radial-gradient(ellipse at 80% 100%, rgba(16,185,129,0.12) 0%, transparent 50%), #0c0c10",
-      }}
+      className={`h-screen flex flex-row overflow-hidden theme-${theme}`}
+      style={{ background: "var(--bg-page)" }}
     >
       {/* ── Sidebar ── */}
       <div
         className="w-64 flex-shrink-0 flex flex-col h-full"
         style={{
-          background: "rgba(9,9,13,0.97)",
-          borderRight: "1px solid rgba(255,255,255,0.06)",
+          background: "var(--bg-sidebar)",
+          borderRight: "1px solid var(--border-sidebar)",
         }}
       >
         {/* Logo */}
@@ -658,52 +730,55 @@ export default function BuyShitFast() {
           <div
             className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
             style={{
-              background: "rgba(33,150,243,0.12)",
-              border: "1px solid rgba(33,150,243,0.3)",
+              background: "var(--bg-logo-icon)",
+              border: "1px solid var(--border-logo-icon)",
             }}
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="#2196f3" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-blue)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
               <circle cx="11" cy="11" r="7" />
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
           </div>
-          <span className="text-white font-bold text-base">Scout</span>
+          <span className="font-bold text-base" style={{ color: "var(--color-text-primary)" }}>Snag</span>
         </div>
 
         {/* New Chat button */}
         <div className="px-3 pb-3">
           <button
             onClick={handleNewChat}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium text-white transition-all hover:bg-white/[0.06] active:bg-white/10"
-            style={{ border: "1px solid rgba(255,255,255,0.10)" }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-all new-chat-btn"
+            style={{
+              border: "1px solid var(--border-new-chat-btn)",
+              color: "var(--color-text-primary)",
+            }}
           >
-            <Plus className="h-4 w-4 text-gray-400" />
+            <Plus className="h-4 w-4" style={{ color: "var(--color-text-secondary)" }} />
             New chat
           </button>
         </div>
 
         {/* Divider */}
-        <div className="mx-3 mb-2" style={{ height: 1, background: "rgba(255,255,255,0.05)" }} />
+        <div className="mx-3 mb-2" style={{ height: 1, background: "var(--color-divider)" }} />
 
         {/* Session list */}
-        <div className="flex-1 overflow-y-auto px-2 pb-4" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.08) transparent" }}>
+        <div className="flex-1 overflow-y-auto px-2 pb-4" style={{ scrollbarWidth: "thin", scrollbarColor: "var(--color-scrollbar) transparent" }}>
           {sessionGroups.length === 0 ? (
-            <p className="text-xs text-gray-600 px-3 py-2">No previous chats</p>
+            <p className="text-xs px-3 py-2" style={{ color: "var(--color-text-muted)" }}>No previous chats</p>
           ) : (
             sessionGroups.map((group) => (
               <div key={group.label} className="mb-4">
-                <p className="text-[10px] text-gray-600 px-3 py-1 font-semibold uppercase tracking-widest">
+                <p className="text-[10px] px-3 py-1 font-semibold uppercase tracking-widest" style={{ color: "var(--color-text-muted)" }}>
                   {group.label}
                 </p>
                 {group.sessions.map((session) => (
                   <div
                     key={session.id}
                     onClick={() => handleLoadSession(session)}
-                    className={`cursor-pointer w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left transition-all group relative mb-0.5 ${
-                      session.id === currentSessionId
-                        ? "bg-white/[0.07] text-white"
-                        : "text-gray-400 hover:bg-white/[0.04] hover:text-gray-200"
-                    }`}
+                    className="session-item cursor-pointer w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left transition-all group relative mb-0.5"
+                    style={{
+                      background: session.id === currentSessionId ? "var(--bg-session-active)" : "transparent",
+                      color: session.id === currentSessionId ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+                    }}
                   >
                     <MessageSquare className="h-3.5 w-3.5 flex-shrink-0 opacity-50" />
                     <span className="flex-1 truncate pr-5 text-[13px]">{session.title}</span>
@@ -726,12 +801,13 @@ export default function BuyShitFast() {
       <div className="flex-1 flex flex-col min-w-0">
         {/* Slim header */}
         <div
-          className="w-full flex items-center justify-end px-6 py-3 flex-shrink-0"
-          style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+          className="w-full flex items-center justify-end px-6 py-3 flex-shrink-0 gap-3"
+          style={{ borderBottom: "1px solid var(--border-header)" }}
         >
+          <ThemeSelector theme={theme} onThemeChange={setTheme} />
           <div className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-            <span className="text-gray-500 text-xs">online</span>
+            <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>online</span>
           </div>
         </div>
 
@@ -741,14 +817,15 @@ export default function BuyShitFast() {
               <div key={i} className="flex gap-2 first:mt-2 msg-slide-in">
                 {msg.type === "bot" ? (
                   <div
-                    className="w-full overflow-hidden p-4 text-white relative font-medium max-w-[75%] mr-auto"
+                    className="w-full overflow-hidden p-4 relative font-medium max-w-[75%] mr-auto"
                     style={{
                       borderRadius: "14px",
-                      background: "rgba(22,22,30,0.75)",
+                      background: "var(--bg-bot-msg)",
                       backdropFilter: "blur(20px)",
                       WebkitBackdropFilter: "blur(20px)",
-                      border: "1px solid rgba(255,255,255,0.07)",
-                      boxShadow: "0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04)",
+                      border: "1px solid var(--border-bot-msg)",
+                      boxShadow: "var(--shadow-bot-msg)",
+                      color: "var(--color-text-primary)",
                     }}
                   >
                     {msg.isThinking ? (
@@ -763,11 +840,11 @@ export default function BuyShitFast() {
                                 key={ri}
                                 className="p-3 relative transition-all hover:brightness-110"
                                 style={{
-                                  background: "rgba(255,255,255,0.04)",
+                                  background: "var(--bg-result-card)",
                                   backdropFilter: "blur(8px)",
                                   WebkitBackdropFilter: "blur(8px)",
-                                  border: "1px solid rgba(255,255,255,0.07)",
-                                  borderLeft: ri === 0 ? "3px solid #4ade80" : "3px solid rgba(255,255,255,0.07)",
+                                  border: "1px solid var(--border-result-card)",
+                                  borderLeft: ri === 0 ? "3px solid #4ade80" : "3px solid var(--border-result-card)",
                                   borderRadius: "12px",
                                 }}
                               >
@@ -781,16 +858,16 @@ export default function BuyShitFast() {
                                   )}
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-start justify-between gap-2">
-                                      <span className="text-white font-semibold text-sm leading-snug flex-1">
+                                      <span className="font-semibold text-sm leading-snug flex-1" style={{ color: "var(--color-text-primary)" }}>
                                         {r.title}
                                       </span>
                                       <ScoreRing score={r.valueScore} />
                                     </div>
-                                    <span className="text-gray-500 text-xs">
+                                    <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
                                       {r.platform} · 📍 {r.location}
                                     </span>
                                     <div className="flex items-baseline gap-2 mt-1.5">
-                                      <span className="text-[#2196f3] text-lg font-bold">{r.price}</span>
+                                      <span className="text-lg font-bold" style={{ color: "var(--color-accent-blue)" }}>{r.price}</span>
                                       <span className="text-green-400 text-xs">{r.savings}</span>
                                     </div>
                                     <div className="flex items-center justify-between mt-2">
@@ -809,7 +886,7 @@ export default function BuyShitFast() {
                                           className="text-xs px-2.5 py-1 rounded-lg font-semibold transition-all hover:scale-105 active:scale-95"
                                           style={{
                                             background: "rgba(33,150,243,0.15)",
-                                            color: "#60a5fa",
+                                            color: "var(--color-accent-blue)",
                                             border: "1px solid rgba(33,150,243,0.25)",
                                           }}
                                         >
@@ -820,7 +897,8 @@ export default function BuyShitFast() {
                                             href={r.link}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="text-[#2196f3] text-xs font-medium no-underline hover:underline"
+                                            className="text-xs font-medium no-underline hover:underline"
+                                            style={{ color: "var(--color-accent-blue)" }}
                                           >
                                             View ↗
                                           </a>
@@ -841,11 +919,11 @@ export default function BuyShitFast() {
                     className="max-w-[60%] flex flex-col text-white ml-auto items-start gap-2 p-4 text-left text-base font-medium"
                     style={{
                       borderRadius: "14px",
-                      background: "rgba(33,150,243,0.88)",
+                      background: "var(--bg-user-msg)",
                       backdropFilter: "blur(8px)",
                       WebkitBackdropFilter: "blur(8px)",
-                      border: "1px solid rgba(255,255,255,0.15)",
-                      boxShadow: "0 4px 20px rgba(33,150,243,0.22)",
+                      border: "1px solid var(--border-user-msg)",
+                      boxShadow: "var(--shadow-user-msg)",
                     }}
                   >
                     {msg.images?.map((src, ii) => (
@@ -874,19 +952,19 @@ export default function BuyShitFast() {
             <div
               className="input-container flex flex-row items-center gap-4 px-4 py-3"
               style={{
-                border: "1px solid rgba(255,255,255,0.09)",
+                border: "1px solid var(--border-input)",
                 borderRadius: "16px",
-                background: "rgba(22,22,30,0.8)",
+                background: "var(--bg-input)",
                 backdropFilter: "blur(20px)",
                 WebkitBackdropFilter: "blur(20px)",
-                boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
+                boxShadow: "var(--shadow-input)",
               }}
             >
               <button
                 type="button"
                 onClick={handleReset}
                 className="flex items-center justify-center h-10 w-10 rounded-full focus:outline-none transition-all hover:opacity-70 hover:scale-110 active:scale-95"
-                style={{ color: "#2196f3" }}
+                style={{ color: "var(--color-accent-blue)" }}
                 tabIndex={0}
                 aria-label="Start new search"
                 title="Start new search"
@@ -895,7 +973,8 @@ export default function BuyShitFast() {
               </button>
 
               <AutosizeTextarea
-                className="flex-1 outline-none border-0 bg-transparent text-white placeholder-gray-500 text-xl px-0"
+                className="flex-1 outline-none border-0 bg-transparent placeholder-gray-500 text-xl px-0"
+                style={{ color: "var(--color-text-primary)" }}
                 placeholder={getPlaceholder()}
                 minHeight={25}
                 maxHeight={55}

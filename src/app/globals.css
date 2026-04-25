@@ -88,3 +88,127 @@
   border-color: rgba(33, 150, 243, 0.45) !important;
   box-shadow: 0 4px 24px rgba(0,0,0,0.6), 0 0 0 3px rgba(33, 150, 243, 0.12) !important;
 }
+
+/* ── Theme tokens ─────────────────────────────────────── */
+.theme-dark {
+  --bg-page: radial-gradient(ellipse at 20% 0%, rgba(79,70,229,0.28) 0%, transparent 52%), radial-gradient(ellipse at 80% 100%, rgba(16,185,129,0.12) 0%, transparent 50%), #0c0c10;
+  --bg-sidebar: rgba(9,9,13,0.97);
+  --border-sidebar: rgba(255,255,255,0.06);
+  --border-header: rgba(255,255,255,0.06);
+  --color-divider: rgba(255,255,255,0.05);
+  --bg-bot-msg: rgba(22,22,30,0.75);
+  --border-bot-msg: rgba(255,255,255,0.07);
+  --shadow-bot-msg: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04);
+  --bg-user-msg: rgba(33,150,243,0.88);
+  --border-user-msg: rgba(255,255,255,0.15);
+  --shadow-user-msg: 0 4px 20px rgba(33,150,243,0.22);
+  --bg-input: rgba(22,22,30,0.8);
+  --border-input: rgba(255,255,255,0.09);
+  --shadow-input: 0 4px 24px rgba(0,0,0,0.5);
+  --bg-result-card: rgba(255,255,255,0.04);
+  --border-result-card: rgba(255,255,255,0.07);
+  --bg-logo-icon: rgba(33,150,243,0.12);
+  --border-logo-icon: rgba(33,150,243,0.3);
+  --bg-session-active: rgba(255,255,255,0.07);
+  --bg-session-hover: rgba(255,255,255,0.04);
+  --border-new-chat-btn: rgba(255,255,255,0.10);
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #6b7280;
+  --color-text-muted: #4b5563;
+  --color-accent-blue: #2196f3;
+  --color-score-track: rgba(255,255,255,0.08);
+  --color-scrollbar: rgba(255,255,255,0.08);
+  --bg-theme-btn: rgba(255,255,255,0.06);
+  --border-theme-btn: rgba(255,255,255,0.10);
+  --bg-theme-dropdown: rgba(18,18,24,0.99);
+  --border-theme-dropdown: rgba(255,255,255,0.10);
+  --bg-theme-option-hover: rgba(255,255,255,0.06);
+  --bg-theme-option-active: rgba(33,150,243,0.15);
+}
+
+.theme-light {
+  --bg-page: radial-gradient(ellipse at 20% 0%, rgba(99,102,241,0.08) 0%, transparent 52%), radial-gradient(ellipse at 80% 100%, rgba(16,185,129,0.05) 0%, transparent 50%), #eef2ff;
+  --bg-sidebar: #ffffff;
+  --border-sidebar: rgba(0,0,0,0.08);
+  --border-header: rgba(0,0,0,0.08);
+  --color-divider: rgba(0,0,0,0.06);
+  --bg-bot-msg: rgba(255,255,255,0.92);
+  --border-bot-msg: rgba(0,0,0,0.08);
+  --shadow-bot-msg: 0 2px 12px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9);
+  --bg-user-msg: rgba(33,150,243,0.90);
+  --border-user-msg: rgba(33,150,243,0.3);
+  --shadow-user-msg: 0 4px 20px rgba(33,150,243,0.22);
+  --bg-input: rgba(255,255,255,0.95);
+  --border-input: rgba(0,0,0,0.10);
+  --shadow-input: 0 2px 12px rgba(0,0,0,0.08);
+  --bg-result-card: rgba(0,0,0,0.03);
+  --border-result-card: rgba(0,0,0,0.08);
+  --bg-logo-icon: rgba(33,150,243,0.10);
+  --border-logo-icon: rgba(33,150,243,0.25);
+  --bg-session-active: rgba(33,150,243,0.10);
+  --bg-session-hover: rgba(0,0,0,0.04);
+  --border-new-chat-btn: rgba(0,0,0,0.10);
+  --color-text-primary: #111827;
+  --color-text-secondary: #6b7280;
+  --color-text-muted: #9ca3af;
+  --color-accent-blue: #1976d2;
+  --color-score-track: rgba(0,0,0,0.08);
+  --color-scrollbar: rgba(0,0,0,0.10);
+  --bg-theme-btn: rgba(0,0,0,0.05);
+  --border-theme-btn: rgba(0,0,0,0.10);
+  --bg-theme-dropdown: rgba(255,255,255,0.99);
+  --border-theme-dropdown: rgba(0,0,0,0.10);
+  --bg-theme-option-hover: rgba(0,0,0,0.04);
+  --bg-theme-option-active: rgba(33,150,243,0.10);
+}
+
+.theme-hc {
+  --bg-page: #000000;
+  --bg-sidebar: #080808;
+  --border-sidebar: rgba(255,255,255,0.25);
+  --border-header: rgba(255,255,255,0.25);
+  --color-divider: rgba(255,255,255,0.15);
+  --bg-bot-msg: rgba(15,15,15,0.99);
+  --border-bot-msg: rgba(255,255,255,0.20);
+  --shadow-bot-msg: 0 4px 24px rgba(0,0,0,0.9), inset 0 1px 0 rgba(255,255,255,0.06);
+  --bg-user-msg: #1565c0;
+  --border-user-msg: rgba(255,255,255,0.30);
+  --shadow-user-msg: 0 4px 20px rgba(33,150,243,0.40);
+  --bg-input: rgba(8,8,8,0.99);
+  --border-input: rgba(255,255,255,0.20);
+  --shadow-input: 0 4px 24px rgba(0,0,0,0.95);
+  --bg-result-card: rgba(255,255,255,0.05);
+  --border-result-card: rgba(255,255,255,0.15);
+  --bg-logo-icon: rgba(33,150,243,0.15);
+  --border-logo-icon: rgba(79,195,247,0.5);
+  --bg-session-active: rgba(255,255,255,0.12);
+  --bg-session-hover: rgba(255,255,255,0.06);
+  --border-new-chat-btn: rgba(255,255,255,0.20);
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #aaaaaa;
+  --color-text-muted: #666666;
+  --color-accent-blue: #4fc3f7;
+  --color-score-track: rgba(255,255,255,0.15);
+  --color-scrollbar: rgba(255,255,255,0.15);
+  --bg-theme-btn: rgba(255,255,255,0.08);
+  --border-theme-btn: rgba(255,255,255,0.20);
+  --bg-theme-dropdown: rgba(10,10,10,0.99);
+  --border-theme-dropdown: rgba(255,255,255,0.20);
+  --bg-theme-option-hover: rgba(255,255,255,0.08);
+  --bg-theme-option-active: rgba(79,195,247,0.15);
+}
+
+/* Session item hover handled via CSS variable */
+.session-item:hover {
+  background: var(--bg-session-hover) !important;
+}
+
+/* New chat button hover */
+.new-chat-btn:hover {
+  background: var(--bg-session-hover);
+}
+
+/* Light theme: flip placeholder color */
+.theme-light textarea::placeholder {
+  color: var(--color-text-muted);
+}
