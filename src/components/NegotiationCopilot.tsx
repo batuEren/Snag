@@ -185,7 +185,7 @@ export default function NegotiationCopilot({ listing, onClose, initialTargetPric
               <div>
                 <label className="block text-white font-semibold text-sm mb-1">Your Target Price</label>
                 <p className="text-gray-500 text-xs">
-                  What price are you hoping to pay? We'll craft 3 Dutch messages around it.
+                  What price are you hoping to pay? We'll craft 3 {language === "nl" ? "Dutch" : "English"} messages around it.
                 </p>
               </div>
               <div className="flex gap-2">
