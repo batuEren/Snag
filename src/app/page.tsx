@@ -565,6 +565,20 @@ export default function BuyShitFast() {
     setInputHint(hintForStep["asking_item"]);
   };
 
+  const refreshBunqBalance = async () => {
+    try {
+      const accRes = await fetch("/api/bunq/accounts");
+      const accData = await accRes.json();
+      const primary = accData.accounts?.[0];
+      const balance = primary?.balance?.value
+        ? `€${parseFloat(primary.balance.value).toFixed(2)}`
+        : "€0.00";
+      setBunqUser((prev) => prev ? { ...prev, balance } : prev);
+    } catch {
+      // silently ignore
+    }
+  };
+
   const handleBunqLogin = async () => {
     setBunqAuthLoading(true);
     try {
@@ -1272,6 +1286,7 @@ export default function BuyShitFast() {
                 message: `Payment sent! €${paid.price.replace(/[^0-9.,]/g, "")} paid via bunq (payment ID: ${paymentId}).`,
                 type: "bot",
               });
+              refreshBunqBalance();
             }}
           />
         )}
