@@ -20,12 +20,45 @@ interface ResultCard {
   image?: string;
 }
 
+interface UrlAnalysisListing {
+  title: string;
+  price: string;
+  priceCents: number | null;
+  condition: string;
+  description: string;
+  location: string;
+  sellerName: string;
+  link: string;
+}
+
+interface UrlAnalysisVerdict {
+  fairPriceMin: number;
+  fairPriceMax: number;
+  verdict: "great deal" | "fair price" | "overpriced";
+  reasoning: string;
+  suggestedOffer: number;
+}
+
+interface UrlAnalysisResult {
+  listing: UrlAnalysisListing;
+  verdict: UrlAnalysisVerdict;
+}
+
+type NegotiationTarget = {
+  title: string;
+  price: string;
+  condition?: string;
+  location?: string;
+  link?: string;
+};
+
 interface Message {
   message: string;
   type: "bot" | "user";
   isThinking?: boolean;
   results?: ResultCard[];
   images?: string[];
+  urlAnalysis?: UrlAnalysisResult;
 }
 
 type FlowStep = "asking_item" | "asking_budget" | "asking_specs" | "searching" | "chat";
@@ -301,6 +334,102 @@ const conditionColor = {
   Good:       { bg: "#78716c18", text: "#a8a29e" },
 } as const;
 
+const VERDICT_META = {
+  "great deal": { label: "Great Deal", color: "#4ade80", bg: "rgba(74,222,128,0.12)", border: "rgba(74,222,128,0.28)" },
+  "fair price": { label: "Fair Price", color: "#fb923c", bg: "rgba(251,146,60,0.12)", border: "rgba(251,146,60,0.28)" },
+  overpriced:   { label: "Overpriced",  color: "#f87171", bg: "rgba(248,113,113,0.12)", border: "rgba(248,113,113,0.28)" },
+} as const;
+
+function UrlAnalysisCard({
+  analysis,
+  onMakeOffer,
+}: {
+  analysis: UrlAnalysisResult;
+  onMakeOffer: () => void;
+}) {
+  const { listing, verdict } = analysis;
+  const meta = VERDICT_META[verdict.verdict];
+  return (
+    <div
+      className="mt-2 p-3 rounded-xl"
+      style={{
+        background: "var(--bg-result-card)",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+        border: "1px solid var(--border-result-card)",
+        borderLeft: `3px solid ${meta.color}`,
+        borderRadius: "12px",
+      }}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] font-bold tracking-widest uppercase" style={{ color: "var(--color-text-muted)" }}>
+          URL Analysis
+        </span>
+        <span
+          className="text-xs px-2 py-0.5 rounded-full font-semibold"
+          style={{ background: meta.bg, color: meta.color, border: `1px solid ${meta.border}` }}
+        >
+          {meta.label}
+        </span>
+      </div>
+      <p className="font-semibold text-sm mb-1 leading-snug" style={{ color: "var(--color-text-primary)" }}>
+        {listing.title}
+      </p>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mb-1">
+        <span className="text-lg font-bold" style={{ color: "var(--color-accent-blue)" }}>
+          {listing.price}
+        </span>
+        {listing.condition && listing.condition !== "Niet opgegeven" && (
+          <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+            {listing.condition}
+          </span>
+        )}
+        {listing.location && (
+          <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+            📍 {listing.location}
+          </span>
+        )}
+      </div>
+      <p className="text-xs mb-1" style={{ color: "var(--color-text-secondary)" }}>
+        Fair price: <span style={{ color: "var(--color-text-primary)" }}>€{verdict.fairPriceMin}–€{verdict.fairPriceMax}</span>
+      </p>
+      <p className="text-xs mb-2.5 leading-relaxed" style={{ color: "var(--color-text-secondary)" }}>
+        {verdict.reasoning}
+      </p>
+      <div className="flex items-center justify-between">
+        <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+          Suggested offer:{" "}
+          <span className="font-semibold" style={{ color: "#4ade80" }}>
+            €{verdict.suggestedOffer}
+          </span>
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onMakeOffer}
+            className="text-xs px-2.5 py-1 rounded-lg font-semibold transition-all hover:scale-105 active:scale-95"
+            style={{
+              background: "rgba(33,150,243,0.15)",
+              color: "var(--color-accent-blue)",
+              border: "1px solid rgba(33,150,243,0.25)",
+            }}
+          >
+            Make Offer
+          </button>
+          <a
+            href={listing.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-medium no-underline hover:underline"
+            style={{ color: "var(--color-accent-blue)" }}
+          >
+            View ↗
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function BuyShitFast() {
   const scrollRef = useRef<null | HTMLDivElement>(null);
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
@@ -311,7 +440,8 @@ export default function BuyShitFast() {
   const [conversation, setConversation] = useState<Message[]>([INITIAL_MESSAGE]);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [inputHint, setInputHint] = useState("What would you like to buy?");
-  const [negotiatingListing, setNegotiatingListing] = useState<ResultCard | null>(null);
+  const [negotiatingListing, setNegotiatingListing] = useState<NegotiationTarget | null>(null);
+  const [negotiatingInitialPrice, setNegotiatingInitialPrice] = useState<string | undefined>(undefined);
 
   const [theme, setTheme] = useState<Theme>("dark");
 
@@ -564,6 +694,62 @@ export default function BuyShitFast() {
     img.src = URL.createObjectURL(file);
   };
 
+  function extractMarktplaatsUrl(text: string): string | null {
+    const m = text.match(/https?:\/\/(?:www\.)?marktplaats\.nl\/[^\s]+/i);
+    return m ? m[0] : null;
+  }
+
+  const handleUrlAnalysis = async (url: string, sessionId: string) => {
+    setConversationForSession(sessionId, (old) => [
+      ...old,
+      { message: "Analyzing listing...", type: "bot", isThinking: true },
+    ]);
+    if (sessionId === currentSessionIdRef.current) scrollToBottom();
+
+    try {
+      const res = await fetch("/api/analyze-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        setConversationForSession(sessionId, (old) => [
+          ...old.slice(0, -1),
+          {
+            message: `I couldn't load that listing — ${data.error ?? "something went wrong"}. Please paste the item details manually and I'll help from there.`,
+            type: "bot",
+          },
+        ]);
+        return;
+      }
+
+      setConversationForSession(sessionId, (old) => [
+        ...old.slice(0, -1),
+        {
+          message: "Here's my analysis of that listing:",
+          type: "bot",
+          urlAnalysis: data as UrlAnalysisResult,
+        },
+      ]);
+
+      if (sessionId === currentSessionIdRef.current) {
+        setFlowStep("chat");
+        setInputHint(hintForStep["chat"]);
+        scrollToBottom();
+      }
+    } catch {
+      setConversationForSession(sessionId, (old) => [
+        ...old.slice(0, -1),
+        {
+          message: "I couldn't load that listing. Please paste the item details manually and I'll help from there.",
+          type: "bot",
+        },
+      ]);
+    }
+  };
+
   const handleSendMessage = async () => {
     const input = userInput.trim();
     if (!input || flowStep === "searching") return;
@@ -574,6 +760,12 @@ export default function BuyShitFast() {
     setUploadedImage(null);
     setUserInput("");
     addMessage({ message: input, type: "user", images: currentImage ? [currentImage] : undefined });
+
+    const marktplaatsUrl = extractMarktplaatsUrl(input);
+    if (marktplaatsUrl) {
+      await handleUrlAnalysis(marktplaatsUrl, sessionId);
+      return;
+    }
 
     switch (flowStep) {
       case "asking_item": {
@@ -849,6 +1041,21 @@ export default function BuyShitFast() {
                     ) : (
                       <>
                         <span className="whitespace-pre-wrap break-words">{msg.message}</span>
+                        {msg.urlAnalysis && (
+                          <UrlAnalysisCard
+                            analysis={msg.urlAnalysis}
+                            onMakeOffer={() => {
+                              setNegotiatingListing({
+                                title: msg.urlAnalysis!.listing.title,
+                                price: msg.urlAnalysis!.listing.price,
+                                condition: msg.urlAnalysis!.listing.condition,
+                                location: msg.urlAnalysis!.listing.location,
+                                link: msg.urlAnalysis!.listing.link,
+                              });
+                              setNegotiatingInitialPrice(`€${msg.urlAnalysis!.verdict.suggestedOffer}`);
+                            }}
+                          />
+                        )}
                         {msg.results && msg.results.length > 0 && (
                           <div className="flex flex-col gap-2.5 mt-3 w-full">
                             {msg.results.map((r, ri) => (
@@ -898,7 +1105,7 @@ export default function BuyShitFast() {
                                       </span>
                                       <div className="flex items-center gap-2">
                                         <button
-                                          onClick={() => setNegotiatingListing(r)}
+                                          onClick={() => { setNegotiatingListing(r); setNegotiatingInitialPrice(undefined); }}
                                           className="text-xs px-2.5 py-1 rounded-lg font-semibold transition-all hover:scale-105 active:scale-95"
                                           style={{
                                             background: "rgba(33,150,243,0.15)",
@@ -958,7 +1165,8 @@ export default function BuyShitFast() {
         {negotiatingListing && (
           <NegotiationCopilot
             listing={negotiatingListing}
-            onClose={() => setNegotiatingListing(null)}
+            onClose={() => { setNegotiatingListing(null); setNegotiatingInitialPrice(undefined); }}
+            initialTargetPrice={negotiatingInitialPrice}
           />
         )}
 
@@ -1040,13 +1248,13 @@ export default function BuyShitFast() {
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="2"
+                  strokeWidth="2.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   className="h-5 w-5 text-white"
                 >
-                  <line x1="22" y1="2" x2="11" y2="13" />
-                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                  <line x1="12" y1="19" x2="12" y2="5" />
+                  <polyline points="5 12 12 5 19 12" />
                 </svg>
               </Button>
             </div>
